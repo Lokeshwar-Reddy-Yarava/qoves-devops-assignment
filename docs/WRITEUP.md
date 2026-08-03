@@ -217,6 +217,14 @@ Before real traffic:
 Local disk on a single minikube node means node loss can mean data loss. Fine for
 the take-home; not fine in production without backups.
 
+Local image loading (`minikube image load`) is suitable only for development.
+After I restarted a previously stopped minikube profile, a new API ReplicaSet
+could not find `lokeshwarreddyyarava/qoves-api:v1.0.1` in the node image cache.
+Kubernetes then attempted a registry pull and entered ImagePullBackOff because
+the image had never been published to a real registry. A production environment
+should pull immutable, digest-pinned images from GHCR, ECR, or another durable
+registry that survives node restart and reschedule.
+
 If I had more time: CloudNativePG + backups to MinIO, admit only digests/signed
 images, FQDN egress for one external host, and proper Prometheus pod discovery
 under HPA. I stopped before that so the core path stays something I can defend
@@ -236,4 +244,12 @@ Assume ingress still answers but `/healthz` is 503, and the alert may be firing.
 6. Bad deploy commit? `git revert`, push, wait for sync
 7. Confirm `/healthz` through ingress is 200 and `qoves_db_up` is 1
 
+**If the API enters ImagePullBackOff** (for example after a minikube restart when
+the node no longer has a previously loaded tag and the image is not on a public
+registry): inspect pod events (`kubectl -n qoves-app describe pod …`), rebuild
+and load with `./scripts/build-and-load-api.sh`, delete the failed pod (or wait
+for the Deployment), and confirm the rollout completes and `/healthz` is 200
+again.
+
 I treat git as the fix path, not random live edits that drift from the repo.
+
