@@ -54,29 +54,30 @@ echo
 echo "============================================================"
 echo "== NetworkPolicy checks =="
 echo "============================================================"
-kubectl -n qoves-app delete pod netpol-test --ignore-not-found --wait=false >/dev/null 2>&1 || true
+# Fully wait for any prior netpol-test so re-runs do not race Terminating pods.
+kubectl -n qoves-app delete pod netpol-test --ignore-not-found --wait=true --timeout=60s >/dev/null 2>&1 || true
 kubectl -n qoves-app run netpol-test --image=busybox:1.36 --restart=Never --command -- sleep 120
 kubectl -n qoves-app wait --for=condition=Ready pod/netpol-test --timeout=90s
 
 echo "DNS (should work):"
 kubectl -n qoves-app exec netpol-test -- nslookup kubernetes.default.svc.cluster.local || true
 
-echo "Egress to example.com (should fail):"
+echo "Egress to example.com (should fail / timeout):"
 set +e
 kubectl -n qoves-app exec netpol-test -- sh -c \
   'wget -T 3 -O- http://example.com >/tmp/out 2>/tmp/err; echo exit=$?; cat /tmp/err'
 set -e
 
-echo "Random pod to Postgres (should fail):"
+echo "Random pod to Postgres:5432 via nc (should fail / timeout under default-deny):"
 set +e
 kubectl -n qoves-app exec netpol-test -- sh -c \
-  'wget -T 3 -O- tcp://postgres.qoves-app.svc.cluster.local:5432 >/tmp/pout 2>/tmp/perr; echo exit=$?; cat /tmp/perr'
+  'nc -z -w 3 postgres.qoves-app.svc.cluster.local 5432; echo nc_exit=$?'
 set -e
 
-echo "API still reaches Postgres (/healthz):"
+echo "API still reaches Postgres (ingress /healthz):"
 curl -sS -i -H "Host: ${HOST_HEADER}" "http://${INGRESS_IP}/healthz" | sed -n '1,30p'
 
-kubectl -n qoves-app delete pod netpol-test --wait=false >/dev/null 2>&1 || true
+kubectl -n qoves-app delete pod netpol-test --ignore-not-found --wait=true --timeout=60s >/dev/null 2>&1 || true
 
 echo
 echo "============================================================"
@@ -94,6 +95,7 @@ echo "============================================================"
 echo "== Prometheus (query from inside the cluster) =="
 echo "============================================================"
 echo "qoves_db_up:"
+kubectl -n qoves-platform delete pod prom-query --ignore-not-found --wait=true --timeout=30s >/dev/null 2>&1 || true
 kubectl -n qoves-platform run prom-query --rm -i --restart=Never \
   --image=curlimages/curl:8.10.1 \
   --command -- curl -sS \
@@ -101,6 +103,7 @@ kubectl -n qoves-platform run prom-query --rm -i --restart=Never \
   | sed -n '1,20p' || true
 echo
 echo "rules:"
+kubectl -n qoves-platform delete pod prom-rules --ignore-not-found --wait=true --timeout=30s >/dev/null 2>&1 || true
 kubectl -n qoves-platform run prom-rules --rm -i --restart=Never \
   --image=curlimages/curl:8.10.1 \
   --command -- curl -sS \

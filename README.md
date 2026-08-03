@@ -80,7 +80,7 @@ pushing. Argo reconciles. App install is not a manual `kubectl apply` loop.
 | B GitOps | `gitops/clusters/minikube/` |
 | C App + DB | `gitops/manifests/app/` |
 | D Network + ingress | netpol + ingress host `qoves.local` |
-| E Secrets | Sealed Secrets ciphertext under `app/secrets/` |
+| E Secrets | Sealed Secrets under `gitops/manifests/app/secrets/` |
 | F Storage | PVC + writeup storage section |
 | G resources / HPA | requests/limits + HPA in `api.yaml` |
 | H metrics / alert | `platform/prometheus` |

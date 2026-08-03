@@ -14,6 +14,13 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: qoves-app
+  # HPA patches Deployment.spec.replicas; ignore so selfHeal does not revert scale.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: qoves-api
+      jsonPointers:
+        - /spec/replicas
   syncPolicy:
     automated:
       prune: true

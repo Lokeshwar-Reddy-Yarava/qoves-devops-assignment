@@ -1,0 +1,9 @@
+# Normalize text; keep shell scripts LF for Linux clones
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+*.Dockerfile text eol=lf
+Dockerfile text eol=lf

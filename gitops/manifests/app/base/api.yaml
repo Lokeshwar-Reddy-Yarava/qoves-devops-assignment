@@ -12,7 +12,8 @@ metadata:
   labels:
     app: qoves-api
 spec:
-  replicas: 1
+  # replica count is owned by the HPA (minReplicas: 1). Do not set replicas here
+  # or Argo selfHeal will fight the HPA and pin scale back to git.
   selector:
     matchLabels:
       app: qoves-api
@@ -42,9 +43,12 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+          # Readiness is / (process up), not /healthz. If readiness used /healthz,
+          # a DB outage marks the pod unready, drops Service endpoints, and
+          # Prometheus loses the scrape target just when the alert needs the gauge.
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /
               port: http
             initialDelaySeconds: 5
             periodSeconds: 5
