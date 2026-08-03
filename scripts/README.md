@@ -8,6 +8,7 @@ on any clone, not only a specific container path.
 | `workspace-up.sh` | start the tool container |
 | `cluster-start.sh` | minikube profile `qoves` with Calico, ingress, metrics-server |
 | `build-and-load-api.sh` | build `lokeshwarreddyyarava/qoves-api:v1.0.1` and load into minikube |
+| `install-sealed-secrets.sh` | one-time Sealed Secrets controller install (bootstrap) |
 | `seal-db-secret.sh` | write SealedSecret ciphertext (needs `POSTGRES_PASSWORD` in env) |
 | `proof.sh` | dump inventory, Argo apps, curl via ingress, netpol test, PVC check |
 

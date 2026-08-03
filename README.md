@@ -80,6 +80,7 @@ docker exec -it qoves-workspace bash                                   # optiona
 kubectl create namespace argocd
 kubectl apply -n argocd \
   -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.12.3/manifests/install.yaml
+./scripts/install-sealed-secrets.sh   # controller once; SealedSecrets stay in GitOps
 kubectl apply -f gitops/clusters/minikube/root-application.yaml
 
 export POSTGRES_PASSWORD="$(openssl rand -base64 24)"

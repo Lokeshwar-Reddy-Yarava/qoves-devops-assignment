@@ -33,14 +33,17 @@ kubectl create namespace argocd
 kubectl apply -n argocd \
   -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.12.3/manifests/install.yaml
 
+# Sealed Secrets controller (bootstrap; not managed as a child Application)
+./scripts/install-sealed-secrets.sh
+
 kubectl apply -f gitops/clusters/minikube/root-application.yaml
 ```
 
-First sync order is not strict. The Argo child apps (namespaces, sealed-secrets,
-secrets, postgres, api, prometheus) reconcile in parallel. Until I seal
-credentials and push the SealedSecret, `app-api` can sit in
-CreateContainerConfigError waiting for Secret `qoves-db`. That is expected;
-selfHeal picks it up once the secret materializes.
+First sync order is not strict. The Argo child apps (namespaces, secrets,
+postgres, api, prometheus) reconcile in parallel. Until I seal credentials and
+push the SealedSecret, `app-api` can sit in CreateContainerConfigError waiting
+for Secret `qoves-db`. That is expected; selfHeal picks it up once the secret
+materializes.
 
 After Sealed Secrets is up, seal against **this** cluster. The password stays in
 my shell only:
@@ -109,10 +112,14 @@ do the same job; I already know Argo's Application model well enough for a short
 call.
 
 **Sealed Secrets.** Goal: credentials never land in git as plaintext or base64.
-Sealed Secrets is the simplest fully local option. I rejected a Secret YAML in
-git. SOPS needs an Argo plugin. External Secrets only makes sense with a real
-backend (Vault / cloud SM), not a fake provider that puts the value back in a
-manifest. Day two I would hang External Secrets off Vault or cloud SM and rotate.
+Sealed Secrets is the simplest fully local option. The *controller* is installed
+once like Argo (`./scripts/install-sealed-secrets.sh`); only the sealed credential
+objects live under GitOps (`gitops/manifests/app/secrets/`), which matches the
+brief: controller install by hand is fine, app delivery is not. I rejected a
+Secret YAML in git. SOPS needs an Argo plugin. External Secrets only makes sense
+with a real backend (Vault / cloud SM), not a fake provider that puts the value
+back in a manifest. Day two I would hang External Secrets off Vault or cloud SM
+and rotate.
 
 The seal script fails if `POSTGRES_PASSWORD` is missing from the environment. I
 do not want a default password string sitting in the repo.
