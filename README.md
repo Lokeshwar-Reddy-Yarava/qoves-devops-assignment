@@ -4,10 +4,35 @@ Public GitOps repo for the QOVES platform exercise.
 
 https://github.com/Lokeshwar-Reddy-Yarava/qoves-devops-assignment
 
-**Writeup:** [docs/WRITEUP.md](docs/WRITEUP.md)
+**Writeup (full detail):** [docs/WRITEUP.md](docs/WRITEUP.md)
 
 Small API plus the platform around it: Calico, Argo CD app-of-apps, Postgres + PVC,
 Sealed Secrets, default-deny netpol, ingress, HPA, Prometheus + one alert.
+
+## Architecture overview
+
+```text
+  You: git commit + push
+           │
+           ▼
+  GitHub repo (source of truth)
+           │
+           │  Argo CD reconciles (app-of-apps)
+           ▼
+  minikube (Calico — NetworkPolicy enforced)
+  ─────────────────────────────────────────────
+  User/curl → Ingress → API (Deployment)
+                           │  DATABASE_URL from Secret
+                           ▼
+                        Postgres (StatefulSet + PVC)
+
+  Sealed Secrets → materializes Secret in qoves-app
+  Prometheus (qoves-platform) scrapes qoves-api Service in qoves-app
+  metrics-server → HPA scales the API
+  App namespace: default-deny; only explicit paths allowed
+```
+
+Detail (decisions, storage, runbook, production gaps) is in the writeup.
 
 ## Layout
 
@@ -81,7 +106,7 @@ pushing. Argo reconciles. App install is not a manual `kubectl apply` loop.
 | C App + DB | `gitops/manifests/app/` |
 | D Network + ingress | netpol + ingress host `qoves.local` |
 | E Secrets | Sealed Secrets under `gitops/manifests/app/secrets/` |
-| F Storage | PVC + writeup storage section |
+| F Storage | PVC + writeup Decisions → Storage |
 | G resources / HPA | requests/limits + HPA in `api.yaml` |
 | H metrics / alert | `platform/prometheus` |
 

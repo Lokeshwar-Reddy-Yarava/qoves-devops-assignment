@@ -9,6 +9,9 @@ ingress, HPA, and a small Prometheus setup with one alert.
 I stuck to the core path instead of stacking stretch goals. A few deliberate
 shortcuts are called out below.
 
+For a short architecture sketch see [README.md](../README.md). This file is the
+detailed walkthrough.
+
 ---
 
 ## 1. How to run it
@@ -118,16 +121,61 @@ do not want a default password string sitting in the repo.
 without an operator first. CloudNativePG is better later for HA and backup; I left
 it as follow-up work.
 
-**HPA on CPU.** The brief asks for metrics-server + HPA, so the API scales on 70%
-CPU (1–3 replicas). Replica count is **not** hard-coded on the Deployment; the HPA
-owns it, and Argo ignores `/spec/replicas` so selfHeal does not fight the scaler.
-For this tiny DB-backed API, CPU is a weak demand signal. Longer term I would scale
-on request rate / concurrency (adapter or KEDA) or SLO error budget.
-
 **NetworkPolicy.** Default deny ingress + egress in `qoves-app`, then only what the
-diagram needs: ingress-nginx to the API, API to Postgres both ways, DNS to
-kube-system, Prometheus scrape from `qoves-platform`. `scripts/proof.sh` checks
-it (DNS works, random egress and random-pod→Postgres fail, API health still OK).
+diagram needs: ingress-nginx to the API, API egress to Postgres and Postgres
+ingress from API (established return traffic is allowed automatically), DNS to
+kube-system, and Prometheus in `qoves-platform` scraping the API.
+`scripts/proof.sh` checks it (DNS works, random egress and random-pod→Postgres
+fail, API health still OK).
+
+### Storage decision
+
+**Access mode is ReadWriteOnce.** One node mounts the volume read-write at a time.
+That limits where `postgres-0` can schedule (it follows the volume). You cannot run
+multiple writers on the same claim.
+
+**Pod dies:** StatefulSet brings `postgres-0` back with the same PVC. Data stays.
+I check this in `proof.sh` with a small table and a row called `survives-restart`.
+
+**Node dies:** on this minikube setup the volume is tied to that node. Lose the
+node and you restore from backup. On cloud CSI you can usually reattach after the
+old attachment is gone, but Postgres is still down until Ready.
+
+**Backup / restore in real life:** scheduled logical dumps or continuous backup to
+object storage (encrypted), plus occasional volume snapshots. Restore path: new
+claim → restore → start Postgres → point the app via git → verify `/healthz` and
+app checks. A PVC that was never deleted is not a backup strategy.
+
+### Scaling decision
+
+The brief asks for metrics-server + HPA, so the API scales on 70% CPU (1–3
+replicas). Replica count is **not** hard-coded on the Deployment; the HPA owns it,
+and Argo ignores `/spec/replicas` so selfHeal does not fight the scaler.
+
+For this tiny DB-backed API, CPU is a weak demand signal. Longer term I would scale
+on request rate / concurrency (adapter or KEDA) or SLO error budget, not "the
+process looked busy."
+
+### Alert decision
+
+Alert: `ApiDatabaseUnreachable` when
+`(qoves_db_up == 0) or (up{job="qoves-api"} == 0)` for 5 minutes.
+
+Why I care: either Postgres looks down to the app for a sustained window, or
+Prometheus cannot scrape the API at all. That is a real outage path (DB, secret,
+network policy, volume, or the API pods themselves), not a short CPU blip.
+
+The background database probe updates `qoves_db_up`. The `/healthz` endpoint
+independently checks the same PostgreSQL connection path for live requests.
+
+Readiness uses `/` so a DB outage does not empty Service endpoints and kill the
+scrape right when the alert needs the gauge. External readiness is still
+expressed by `/healthz` through ingress for humans and load balancers that care.
+
+Prometheus runs in `qoves-platform` and scrapes the `qoves-api` Service in
+`qoves-app`. With multiple HPA replicas a single static Service target under-
+samples backends. I left it simple for this lab; production would use
+endpoints/pod discovery.
 
 ---
 
@@ -169,51 +217,14 @@ Before real traffic:
 Local disk on a single minikube node means node loss can mean data loss. Fine for
 the take-home; not fine in production without backups.
 
----
-
-## 5. Storage
-
-**Access mode is ReadWriteOnce.** One node mounts the volume read-write at a time.
-That limits where `postgres-0` can schedule (it follows the volume). You cannot run
-multiple writers on the same claim.
-
-**Pod dies:** StatefulSet brings `postgres-0` back with the same PVC. Data stays.
-I check this in `proof.sh` with a small table and a row called `survives-restart`.
-
-**Node dies:** on this minikube setup the volume is tied to that node. Lose the
-node and you restore from backup. On cloud CSI you can usually reattach after the
-old attachment is gone, but Postgres is still down until Ready.
-
-**Backup / restore in real life:** scheduled logical dumps or continuous backup to
-object storage (encrypted), plus occasional volume snapshots. Restore path: new
-claim → restore → start Postgres → point the app via git → verify `/healthz` and
-app checks. A PVC that was never deleted is not a backup strategy.
+If I had more time: CloudNativePG + backups to MinIO, admit only digests/signed
+images, FQDN egress for one external host, and proper Prometheus pod discovery
+under HPA. I stopped before that so the core path stays something I can defend
+line by line.
 
 ---
 
-## 6. Alert
-
-Alert: `ApiDatabaseUnreachable` when
-`(qoves_db_up == 0) or (up{job="qoves-api"} == 0)` for 5 minutes.
-
-Why I care: either Postgres looks down to the app for a sustained window, or
-Prometheus cannot scrape the API at all. That is a real outage path (DB, secret,
-network policy, volume, or the API pods themselves), not a short CPU blip.
-
-The background database probe updates `qoves_db_up`. The `/healthz` endpoint
-independently checks the same PostgreSQL connection path for live requests.
-
-Readiness uses `/` so a DB outage does not empty Service endpoints and kill the
-scrape right when the alert needs the gauge. External readiness is still
-expressed by `/healthz` through ingress for humans and load balancers that care.
-
-Prometheus scrapes the API Service in `qoves-platform`. With multiple HPA
-replicas that under-samples backends (static Service target). I left it simple for
-this lab; production would use endpoints/pod discovery.
-
----
-
-## 7. Runbook when `/healthz` is 503
+## 5. Runbook when `/healthz` is 503
 
 Assume ingress still answers but `/healthz` is 503, and the alert may be firing.
 
@@ -226,11 +237,3 @@ Assume ingress still answers but `/healthz` is 503, and the alert may be firing.
 7. Confirm `/healthz` through ingress is 200 and `qoves_db_up` is 1
 
 I treat git as the fix path, not random live edits that drift from the repo.
-
----
-
-## What I would do if I had more time
-
-CloudNativePG + backups to MinIO, admit only digests/signed images, FQDN egress
-for one external host, and proper Prometheus pod discovery under HPA. I stopped
-before that so the core path stays something I can defend line by line.
