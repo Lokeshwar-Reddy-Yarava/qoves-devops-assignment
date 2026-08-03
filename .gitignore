@@ -1,0 +1,23 @@
+# Secrets — never commit plaintext (protect any nested secrets/ tree)
+.env
+.env.*
+*.key
+*.pem
+**/secrets/*.yaml
+!**/secrets/*sealed*.yaml
+!**/secrets/*Sealed*.yaml
+!**/secrets/*.sealedsecret.yaml
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local tooling / Python
+*.log
+.kube/
+__pycache__/
+*.py[cod]
+.venv/
+venv/

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: qoves-app
+  labels:
+    app.kubernetes.io/part-of: qoves
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: qoves-platform
+  labels:
+    app.kubernetes.io/part-of: qoves

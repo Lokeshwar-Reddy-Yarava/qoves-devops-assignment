@@ -1,0 +1,28 @@
+services:
+  qoves-workspace:
+    build:
+      context: ../..
+      dockerfile: docker/workspace/Dockerfile
+    image: qoves-workspace:v1.0.0
+    container_name: qoves-workspace
+    hostname: qoves-workspace
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    privileged: true
+    network_mode: host
+    volumes:
+      - ../..:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+      - qoves-kube:/home/ubuntu/.kube
+      - qoves-minikube:/home/ubuntu/.minikube
+    user: "1000:1000"
+    group_add:
+      - "986"
+    environment:
+      HOME: /home/ubuntu
+      DOCKER_API_VERSION: "1.44"
+
+volumes:
+  qoves-kube:
+  qoves-minikube:
